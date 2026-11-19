@@ -1,12 +1,65 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+<base target="_top">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Portal Petugas · Antrean Truk</title>
 <meta name="robots" content="noindex, nofollow">
-<script src="/config.js"></script>
-<script src="/gas-shim.js"></script>
+<title>Portal Petugas · Antrean Truk</title>
+<script>
+/* ===== Penghubung Vercel ↔ Apps Script (file ini SAMA untuk Apps Script & GitHub) =====
+   Dibuka dari Apps Script → bagian ini diam, pakai google.script.run asli.
+   Dibuka dari Vercel → panggilan google.script.run diteruskan ke API Apps Script (POST {fn, args}). */
+(function () {
+  'use strict';
+  // ID deployment Apps Script (Kelola deployment → ID). Ganti di SINI saja bila pindah deployment.
+  var DEPLOY_ID = 'AKfycbzlKWkcVn4KF95zpT3-21INAkrkiUgmTtjkfbcmUYSaJnhRfU10p7WbXvh5A40360LBQQ';
+  var API = 'https:' + '/' + '/script.google.com/macros/s/' + DEPLOY_ID + '/exec';
+  var inAppsScript = /googleusercontent\.com$/.test(location.hostname) || (window.google && window.google.script && window.google.script.run);
+  if (inAppsScript) return;
+
+  function call(fn, args) {
+    return fetch(window.ANTREAN_API || API, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn: fn, args: args }), redirect: 'follow', credentials: 'omit'
+    }).then(function (res) {
+      if (!res.ok) throw new Error('Server tidak bisa dihubungi (' + res.status + ').');
+      return res.json();
+    }).then(function (out) {
+      if (!out.ok) throw new Error(out.error || 'Terjadi kesalahan di server.');
+      var data = out.data;
+      // QR pendaftaran vendor menunjuk ke alamat web ini
+      if (fn === 'getBootConfig' && data && typeof data === 'object') data = Object.assign({}, data, { vendorUrl: location.origin + '/' });
+      return data;
+    });
+  }
+  function runner(onOk, onFail) {
+    return new Proxy({}, { get: function (_, name) {
+      if (name === 'withSuccessHandler') return function (f) { return runner(f, onFail); };
+      if (name === 'withFailureHandler') return function (f) { return runner(onOk, f); };
+      if (name === 'withUserObject') return function () { return runner(onOk, onFail); };
+      return function () {
+        var args = Array.prototype.slice.call(arguments);
+        call(String(name), args).then(function (d) { if (onOk) onOk(d); },
+          function (e) { if (onFail) onFail(e instanceof Error ? e : new Error(String(e))); });
+      };
+    } });
+  }
+  // ?p=gdfg dst. ikut tercatat di alamat browser (bookmark & tombol Back)
+  function url(params) { var q = new URLSearchParams(params || {}).toString(); return location.pathname + (q ? '?' + q : ''); }
+  var history = {
+    push: function (state, params) { window.history.pushState(state || {}, '', url(params)); },
+    replace: function (state, params) { window.history.replaceState(state || {}, '', url(params)); },
+    setChangeHandler: function (fn) {
+      window.addEventListener('popstate', function () {
+        fn({ state: window.history.state, location: { parameter: Object.fromEntries(new URLSearchParams(location.search)) } });
+      });
+    }
+  };
+  window.google = window.google || {};
+  window.google.script = { run: runner(null, null), history: history };
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">

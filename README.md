@@ -18,17 +18,26 @@ HP / laptop ──▶ Vercel (index.html, portal.html) ──POST {fn,args}─�
 
 | File | Isi |
 | --- | --- |
-| `index.html` | Form vendor (hasil build dari Vendor.html) |
-| `portal.html` | Portal petugas (hasil build dari Portal.html) |
-| `config.js` | **Alamat API** = URL Aplikasi web Apps Script (berakhiran `/exec`) |
-| `gas-shim.js` | Penghubung: meneruskan panggilan `google.script.run` ke API |
+| `index.html` | Form vendor = isi **Vendor.html** apa adanya |
+| `portal.html` | Portal petugas = isi **Portal.html** apa adanya |
 | `vercel.json` | Alamat rapi + header keamanan (anti-clickjacking, CSP, izin kamera) |
 | `build.py` | Membuat ulang index.html & portal.html dari Vendor.html & Portal.html |
 
-## Update tampilan
-1. Ubah `Vendor.html` / `Portal.html` seperti biasa.
-2. `python3 build.py <folder Vendor.html & Portal.html>`
-3. Commit & push ke GitHub → Vercel otomatis deploy ulang (±1 menit).
+## Update tampilan (tanpa alat apa pun)
+File HTML di Apps Script dan di GitHub **isinya sama persis**, hanya beda nama:
+
+| Apps Script | GitHub |
+| --- | --- |
+| Portal.html | portal.html |
+| Vendor.html | index.html |
+
+1. Apps Script: paste file baru → Simpan → Kelola deployment → pensil → **Versi baru**.
+2. GitHub: buka `portal.html` (atau `index.html`) → ikon pensil → hapus semua → paste isi yang sama → **Commit changes**.
+3. Vercel otomatis memperbarui web ±1 menit. Tidak perlu membuka Vercel.
+
+## Pindah deployment Apps Script
+Alamat API ada di baris `var DEPLOY_ID = '...'` di bagian atas **Portal.html** dan **Vendor.html**.
+Ganti ID-nya di kedua file (lalu langkah update di atas).
 
 ## Update server (Kode.gs)
-Tetap lewat Apps Script: Kelola deployment → pensil → **Versi baru** → Terapkan. URL `/exec` tidak berubah, `config.js` tidak perlu diubah.
+Tetap lewat Apps Script: Kelola deployment → pensil → **Versi baru** → Terapkan. URL `/exec` tidak berubah, file HTML tidak perlu diubah.
