@@ -590,6 +590,18 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .kx-list{display:flex;flex-direction:column;gap:8px}
 .kx-row{display:grid;grid-template-columns:minmax(150px,1.1fr) minmax(170px,1.3fr) minmax(0,2fr) auto;gap:12px;align-items:center;padding:10px 12px;border:2px solid var(--line);border-left:5px solid var(--sc);border-radius:12px;background:#fff;animation:ssIn .35s var(--ease) backwards;animation-delay:var(--d)}
 .kx-row:hover{border-color:var(--sc)}
+.kx-grp{display:flex;align-items:center;gap:10px;margin:14px 0 6px;padding:8px 12px;border-radius:12px;background:#f8fafc;border:1.5px solid var(--line);font-weight:800;font-size:14px}
+.kx-grp:first-child{margin-top:0}
+.kx-grp .gi{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--accent);color:#fff}
+.kx-grp .gi .i{width:16px;height:16px}
+.kx-grp small{font-weight:600;color:var(--muted);font-size:12px}
+.kx-old{display:inline-block;margin-top:4px;font-size:10.5px;font-weight:800;color:#9a3412;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:1px 6px}
+.rj-cats{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.rj-cats button{border:2px solid var(--line);background:#fff;border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.rj-cats button.on{background:var(--err);border-color:var(--err);color:#fff}
+.rj-banner{margin:6px 0 4px;padding:8px 10px;border-radius:10px;background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;font-size:12px;line-height:1.4}
+.rj-banner b{display:block;font-size:11.5px;letter-spacing:.03em}
+.rj-banner .btn{margin-top:6px;font-size:12px;padding:6px 10px}
 .kx-id b{display:block;font-size:13px}
 .kx-id small,.kx-veh small{display:block;font-size:11.5px;color:var(--muted)}
 .kx-veh b{display:block;font-size:13px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2131,6 +2143,7 @@ const fmtShort = (s) => new Date(`${s}T00:00:00`).toLocaleDateString('id-ID', { 
 // Link WhatsApp disimpan sebagai konstanta: Apps Script menghapus komentar dan bisa salah
 // mengira "//" di dalam template literal sebagai komentar → kode rusak.
 const WA_URL = 'https:' + '/' + '/wa.me/';
+const REJECT_KATEGORI = ['Error sistem', 'Daftar ganda', 'Data salah', 'Dokumen tidak sesuai', 'Batal datang', 'Lainnya'];
 const waNum = (s) => { let n = String(s).replace(/\D/g, ''); if (n.startsWith('0')) n = `62${n.slice(1)}`; return n; };
 const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const tokenKey = (portal) => `truckSession_${portal}`;
@@ -2692,6 +2705,12 @@ const Staff = {
 
   detectNew(queue) {
     const ids = new Set(queue.map((q) => q.rowNumber));
+    // Notifikasi bila admin baru saja me-reject antrean yang tadinya masih aktif
+    const prev = new Map(((this.data && this.data.queue) || []).map((q) => [q.rowNumber, q.status]));
+    queue.filter((q) => q.rejectAdmin && prev.has(q.rowNumber) && prev.get(q.rowNumber) !== 'Ditolak').slice(0, 3).forEach((q) => {
+      beep();
+      Toast.show(`Admin reject ${q.noKendaraan}: ${q.rejectAdmin.kategori} · ${q.rejectAdmin.alasan}`, 'error', 9000);
+    });
     this.fresh = new Set();
     if (this.known) {
       const fresh = queue.filter((q) => !this.known.has(q.rowNumber));
@@ -2976,6 +2995,7 @@ const Staff = {
       x.tertahan ? `<span class="resched-tag stuck-tag">${icon('alert')}DARI ${esc(fmtShort(x.tertahan))} · BELUM KELUAR</span>` : '',
       ['Masuk', 'Proses'].includes(x.status) && x.tertahan ? `<span class="resched-tag stuck-tag">${icon('alert')}GUDANG BELUM ${x.status === 'Proses' ? 'FINISH' : 'START'}</span>` : '',
       x.tanpaSelesai ? `<span class="resched-tag stuck-tag" title="${esc(x.catatan)}">${icon('alert')}KELUAR TANPA FINISH GUDANG</span>` : '',
+      x.rejectAdmin ? Staff.rejectBanner(x) : '',
       !x.ritSusulan && x.jadwalUlang ? `<span class="resched-tag clickable" role="button" tabindex="0" data-riwayat="${x.rowNumber}" title="Lihat riwayat jadwal ulang">${icon('calendar')}Dijadwal ulang${x.jadwalUlang > 1 ? ` ×${x.jadwalUlang}` : ''}</span>` : '',
     ].join('');
     // Truk yang sama punya tujuan lain hari ini (mis. bongkar GDRM lalu muat GDFG)
@@ -3002,6 +3022,15 @@ const Staff = {
       ${canPlat ? `<button type="button" class="plat-edit" data-plat="${x.rowNumber}">${icon('edit')}Edit plat nomor</button>` : ''}
       <div class="q-foot">Daftar ${esc(fmtTime(x.timestamp))}${updated}</div>
     </article>`;
+  },
+
+  // Kartu yang di-reject admin: alasan + tombol kabari supir lewat WA
+  rejectBanner(x) {
+    const r = x.rejectAdmin;
+    const wa = waNum(x.nomorWA);
+    const text = `Halo ${x.namaSupir}, antrean ${x.noAntrean} (${x.noKendaraan}) jadwal ${fmtShort(x.tanggal)} ${fmtSlot(x.jadwal)} DIBATALKAN oleh admin DSC Jatake 1601.\nAlasan: ${r.kategori} - ${r.alasan}.\nSilakan daftar ulang atau hubungi Security. Terima kasih.`;
+    return `<div class="rj-banner"><b>DIREJECT ADMIN · ${esc(r.kategori.toUpperCase())}</b>${esc(r.alasan)}<br><small>${esc(r.at)} · ${esc(byName(r.by))}</small>
+      ${wa.length >= 10 ? `<br><a class="btn btn-success" href="${WA_URL}${esc(wa)}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener noreferrer">${icon('phone')}Kabari supir</a>` : ''}</div>`;
   },
 
   // Riwayat jadwal ulang: kapan, oleh akun siapa, dari slot mana ke mana, alasannya
@@ -3879,6 +3908,7 @@ const Koreksi = {
       if (!it) return;
       if (b.dataset.kx === 'edit') this.openEdit(it);
       if (b.dataset.kx === 'del') this.openDelete(it);
+      if (b.dataset.kx === 'rej') this.openReject(it);
     });
   },
   ensure() { if (!this.loaded) this.load(); },
@@ -3910,18 +3940,65 @@ const Koreksi = {
   render() {
     const box = $('#kxList');
     if (!this.list.length) { box.innerHTML = '<div class="empty">Tidak ada antrean pada tanggal / kata kunci ini.</div>'; return; }
-    box.innerHTML = this.list.map((x, i) => {
+    let i = 0;
+    // Dipisah per gudang (GDFG Pallet, GDFG Curah, GDRM, GDPM) seperti portal
+    box.innerHTML = groupByGudang(this.list, 'timestamp').map((g) => `<div class="kx-grp"><span class="gi">${gudangIcon(g.plant)}</span>${esc(g.label)}
+      <small>${g.rows.length} kendaraan</small></div>` + g.rows.map((x) => this.row(x, i++)).join('')).join('');
+  },
+
+  row(x, i) {
+    {
       const w = this.warn(x);
       const times = KX_STAGES.map(([, key, label]) => `<span class="${x[key] ? '' : 'miss'}">${label}<b>${x[key] ? esc(hmOf(x[key])) : '–'}</b></span>`).join('');
       return `<div class="kx-row s-${STATUS_CLASS[x.status] || 'wait'}" style="--d:${Math.min(i, 20) * 25}ms">
-        <div class="kx-id"><b>${esc(x.noAntrean)}</b><small>${esc(x.kartuLabel || '')} · ${esc(x.plant)} · ${esc(fmtSlot(x.jadwal))}</small><span class="st-pill">${esc(x.status)}</span></div>
+        <div class="kx-id"><b>${esc(x.noAntrean)}</b><small>${esc(x.kartuLabel || '')} · ${esc(x.plant)} · ${esc(fmtSlot(x.jadwal))}</small><span class="st-pill">${esc(x.status)}</span>${x.tertahan ? `<span class="kx-old">dari ${esc(fmtShort(x.tertahan))} · belum keluar</span>` : ''}</div>
         <div class="kx-veh"><span class="plate sm">${esc(x.noKendaraan)}</span><b title="${esc(x.vendor)}">${esc(x.vendor)}</b><small>${esc(x.namaSupir)}</small></div>
         <div><div class="kx-times">${times}</div>${w ? `<div class="kx-warn">${esc(w)}</div>` : ''}</div>
         <div class="kx-acts">
           <button type="button" class="btn btn-primary btn-xs" data-kx="edit" data-row="${x.rowNumber}">${icon('edit')}Edit</button>
+          ${['Keluar', 'Ditolak'].includes(x.status) ? '' : `<button type="button" class="btn btn-outline btn-xs" data-kx="rej" data-row="${x.rowNumber}" style="color:#c2410c;border-color:#fdba74">${icon('x')}Reject</button>`}
           <button type="button" class="btn btn-outline btn-xs" data-kx="del" data-row="${x.rowNumber}" style="color:var(--err)">${icon('trash')}Hapus</button>
         </div></div>`;
-    }).join('');
+    }
+  },
+
+  // Reject: status jadi Ditolak + kategori & keterangan, tampil di kartu portal (bisa dikabarkan ke supir)
+  openReject(x) {
+    this.item = x;
+    let kat = '';
+    Modal.open('Reject Antrean', `
+      <div class="kx-info"><b>${esc(x.noKendaraan)}</b> · ${esc(x.vendor)}<br><small class="muted">${esc(x.noAntrean)} · ${esc(x.plant)} · ${esc(fmtSlot(x.jadwal))} · status sekarang <b>${esc(x.status)}</b></small></div>
+      <p style="margin:0 0 8px;font-size:13px">Status menjadi <b>Ditolak</b>, kuota slot kembali, data tetap tersimpan (tidak dihapus). Alasannya tampil di kartu Security & gudang.</p>
+      <span class="lbl">Kategori</span>
+      <div class="rj-cats" id="rjCats">${REJECT_KATEGORI.map((k) => `<button type="button" data-k="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+      <div class="field" style="margin-bottom:6px"><label class="lbl" for="rjAlasan">Keterangan</label>
+        <input id="rjAlasan" maxlength="150" placeholder="mis. web error, supir daftar 2x untuk truk yang sama"></div>
+      <div class="pw-msg" id="rjMsg" role="alert"></div>`,
+      `<button type="button" class="btn btn-outline" data-m="no">Batal</button>
+       <button type="button" class="btn btn-danger" id="rjSave"><span class="spinner"></span>${icon('x')}<span>Reject</span></button>`);
+    $('#rjCats').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-k]');
+      if (!b) return;
+      kat = b.dataset.k;
+      $$('#rjCats button').forEach((o) => o.classList.toggle('on', o === b));
+    });
+    $('#rjSave').addEventListener('click', async () => {
+      const alasan = $('#rjAlasan').value.trim();
+      if (!kat) return ($('#rjMsg').textContent = 'Pilih kategori dulu.');
+      if (alasan.length < 3) return ($('#rjMsg').textContent = 'Isi keterangan (min. 3 huruf).');
+      const btn = $('#rjSave');
+      setBtnLoading(btn, true);
+      try {
+        await api('adminRejectAntrean', Staff.token, x.rowNumber, { noAntrean: x.noAntrean, kategori: kat, alasan });
+        Modal.close();
+        Toast.show(`${x.noKendaraan} di-reject · ${kat}`, 'success');
+        this.load();
+      } catch (err) {
+        if (isSessionError(err)) { Modal.close(); return Staff.expire(errMsg(err)); }
+        $('#rjMsg').textContent = errMsg(err, 'Gagal reject.');
+        setBtnLoading(btn, false);
+      }
+    });
   },
 
   openEdit(x) {
