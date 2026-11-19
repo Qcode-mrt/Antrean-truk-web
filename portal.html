@@ -657,6 +657,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .qs.done span,.qs.now span{color:var(--text)}
 .qs.now span{color:var(--sc)}
 .qs small{font-size:10.5px;color:var(--text-2);font-weight:600;font-variant-numeric:tabular-nums;min-height:1.2em}
+/* Nama akun yang menekan tahap itu (penelusuran) */
+.qs em,.tl-step em{display:block;font-style:normal;font-size:9px;font-weight:700;color:#64748b;max-width:64px;margin:1px auto 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resched-tag.clickable{cursor:pointer;text-decoration:underline dotted}
+.rj-list{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.rj-list li{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.45}
+.rj-list li b{color:#9a3412}
 
 /* Animasi truk boks di atas stepper (posisi mengikuti tahap aktif) */
 .q-lane{position:relative;height:38px;margin:4px 4px -4px;overflow:hidden}
@@ -2476,6 +2482,8 @@ const Staff = {
       if (act) return this.doAction(Number(act.dataset.row), act.dataset.action, act);
       const cs = e.target.closest('[data-cardscan]');
       if (cs) return CardScan.start(Number(cs.dataset.cardscan));
+      const rj = e.target.closest('[data-riwayat]');
+      if (rj) return this.showRiwayat(Number(rj.dataset.riwayat));
       const rs = e.target.closest('[data-resched]');
       if (rs) return Resched.open(Number(rs.dataset.resched));
       const pe = e.target.closest('[data-plat]');
@@ -2883,14 +2891,18 @@ const Staff = {
   flowSteps(x) {
     const times = [x.timestamp, x.masukAt, x.prosesAt, x.selesaiAt, x.keluarAt];
     if (x.status === 'Ditolak' || x.status === 'Hangus') {
+      const tolakBy = x.status === 'Ditolak' && x.oleh && x.oleh.tolak ? `<em title="${esc(x.oleh.tolak)}">${esc(byName(x.oleh.tolak))}</em>` : '';
       return `${truckLane(x)}<div class="q-steps rejected"><div class="qs done"><i></i><span>Menunggu</span><small>${esc(fmtTime(x.timestamp))}</small></div>
-        <div class="qs reject"><i>${icon('x')}</i><span>${esc(x.status)}</span><small>${esc(fmtTime(x.updatedAt))}</small></div></div>`;
+        <div class="qs reject"><i>${icon('x')}</i><span>${esc(x.status)}</span><small>${esc(fmtTime(x.updatedAt))}</small>${tolakBy}</div></div>`;
     }
     const idx = FLOW.indexOf(x.status);
     const last = FLOW.length - 1;
+    const o = x.oleh || {};
+    const bys = ['', o.masuk, o.proses, o.selesai, o.keluar];
     return `${truckLane(x)}<div class="q-steps">${FLOW.map((s, i) => {
       const cls = i < idx || (i === idx && i === last) ? 'done' : i === idx ? 'now' : '';
-      return `<div class="qs ${cls}"><i></i><span>${s === 'Proses' ? (x.plant === 'GDFG' ? 'Muat' : 'Bongkar') : s}</span><small>${times[i] ? esc(fmtTime(times[i])) : '&nbsp;'}</small></div>`;
+      const by = bys[i] ? `<em title="${esc(bys[i])}">${esc(byName(bys[i]))}</em>` : '';
+      return `<div class="qs ${cls}"><i></i><span>${s === 'Proses' ? (x.plant === 'GDFG' ? 'Muat' : 'Bongkar') : s}</span><small>${times[i] ? esc(fmtTime(times[i])) : '&nbsp;'}</small>${by}</div>`;
     }).join('')}</div>`;
   },
 
@@ -2911,7 +2923,7 @@ const Staff = {
       x.tertahan ? `<span class="resched-tag stuck-tag">${icon('alert')}DARI ${esc(fmtShort(x.tertahan))} · BELUM KELUAR</span>` : '',
       ['Masuk', 'Proses'].includes(x.status) && x.tertahan ? `<span class="resched-tag stuck-tag">${icon('alert')}GUDANG BELUM ${x.status === 'Proses' ? 'FINISH' : 'START'}</span>` : '',
       x.tanpaSelesai ? `<span class="resched-tag stuck-tag" title="${esc(x.catatan)}">${icon('alert')}KELUAR TANPA FINISH GUDANG</span>` : '',
-      !x.ritSusulan && x.jadwalUlang ? `<span class="resched-tag" title="${esc(x.catatan)}">${icon('calendar')}Dijadwal ulang${x.jadwalUlang > 1 ? ` ×${x.jadwalUlang}` : ''}</span>` : '',
+      !x.ritSusulan && x.jadwalUlang ? `<span class="resched-tag clickable" role="button" tabindex="0" data-riwayat="${x.rowNumber}" title="Lihat riwayat jadwal ulang">${icon('calendar')}Dijadwal ulang${x.jadwalUlang > 1 ? ` ×${x.jadwalUlang}` : ''}</span>` : '',
     ].join('');
     // Truk yang sama punya tujuan lain hari ini (mis. bongkar GDRM lalu muat GDFG)
     const multi = (x.tujuanLain || []).map((t) => `<span class="multi-tag s-${STATUS_CLASS[t.status] || 'wait'}" title="${esc(t.noAntrean)}">${esc(t.plant)} ${esc(fmtSlot(t.jadwal))} · ${esc(t.status)}</span>`).join('');
@@ -2937,6 +2949,18 @@ const Staff = {
       ${canPlat ? `<button type="button" class="plat-edit" data-plat="${x.rowNumber}">${icon('edit')}Edit plat nomor</button>` : ''}
       <div class="q-foot">Daftar ${esc(fmtTime(x.timestamp))}${updated}</div>
     </article>`;
+  },
+
+  // Riwayat jadwal ulang: kapan, oleh akun siapa, dari slot mana ke mana, alasannya
+  showRiwayat(row) {
+    const x = this.data && this.data.queue.find((q) => q.rowNumber === row);
+    if (!x) return;
+    const list = (x.riwayatJadwal || []).map((t) => {
+      const m = t.match(/^\[([^\]]+?) (\S+)\] Jadwal ulang: (.+)$/);
+      return m ? `<li><b>${esc(m[2])}</b> · ${esc(m[1])}<br>${esc(m[3])}</li>` : `<li>${esc(t)}</li>`;
+    }).join('');
+    Modal.open(`Riwayat Jadwal Ulang · ${x.noKendaraan}`,
+      list ? `<ul class="rj-list">${list}</ul>` : '<p class="muted">Tidak ada catatan jadwal ulang manual.</p>');
   },
 
   async doAction(row, key, btn, opt = {}) {
@@ -3215,12 +3239,13 @@ const Rekap = {
     const dur = (m) => (m == null ? '–' : m >= 60 ? `${Math.floor(m / 60)}j ${Math.round(m % 60)}m` : `${Math.round(m)}m`);
     // Tahap kosong padahal tahap sesudahnya ada jamnya → ditandai "tidak dicatat", tahap lain tetap tampil jamnya
     const timeline = (x) => {
-      const st = [['Daftar', x.daftarAt], ['Masuk', x.masukAt], [x.plant === 'GDFG' ? 'Muat' : 'Bongkar', x.prosesAt], ['Selesai', x.selesaiAt], ['Keluar', x.keluarAt]];
+      const o = x.oleh || {};
+      const st = [['Daftar', x.daftarAt, ''], ['Masuk', x.masukAt, o.masuk], [x.plant === 'GDFG' ? 'Muat' : 'Bongkar', x.prosesAt, o.proses], ['Selesai', x.selesaiAt, o.selesai], ['Keluar', x.keluarAt, o.keluar]];
       const last = st.map(([, t]) => !!t).lastIndexOf(true);
-      return st.map(([label, iso], k) => {
+      return st.map(([label, iso, by], k) => {
         const skip = !iso && k < last;
         const cls = iso ? `on${k > 0 && !st[k - 1][1] ? ' after-skip' : ''}` : skip ? 'skip' : '';
-        return `<div class="tl-step ${cls}"><i></i><span>${label}</span><b>${iso ? esc(fmtTime(iso)) : skip ? `Tidak di-scan /<br>tidak di-${k === 3 ? 'Finish' : k === 2 ? 'Start' : 'catat'} ${esc(k >= 2 ? x.plant : 'Security')}` : '–'}</b></div>`;
+        return `<div class="tl-step ${cls}"><i></i><span>${label}</span><b>${iso ? esc(fmtTime(iso)) : skip ? `Tidak di-scan /<br>tidak di-${k === 3 ? 'Finish' : k === 2 ? 'Start' : 'catat'} ${esc(k >= 2 ? x.plant : 'Security')}` : '–'}</b>${iso && by ? `<em title="${esc(by)}">${esc(byName(by))}</em>` : ''}</div>`;
       }).join('');
     };
     // Urutan: yang sudah selesai/keluar paling atas (terbaru dulu), lalu yang masih di area, lalu yang menunggu (urut slot)
@@ -3298,10 +3323,11 @@ const Rekap = {
     d.days.forEach((x) => L.push([x.tanggal, x.hari, x.total, x.Menunggu, x.Masuk, x.Proses, x.Selesai, x.Keluar, x.Ditolak, x.Hangus, x.GDFG, x.GDRM, x.GDPM, x.Pallet, x.Curah, x.Lokal, x.Ekspor, x['RM Non RBD'], x['RM RBD'], x.avgAntre, x.avgBongkar, x.avgArea].map(q).join(';')));
     L.push('');
     L.push(['DETAIL KENDARAAN'].map(q).join(';'));
-    L.push(['Tanggal', 'Kartu Antrean', 'No Visitor', 'Kode Booking', 'Gudang', 'Pengiriman', 'No Polisi', 'Vendor', 'Supir', 'Jam Masuk Slot', 'Status', 'Keterangan Kedatangan', 'Jam Daftar', 'Jam Masuk', 'Mulai Bongkar/Muat', 'Selesai', 'Keluar', 'Antre (mnt)', 'Bongkar (mnt)', 'Di Area (mnt)'].map(q).join(';'));
+    L.push(['Tanggal', 'Kartu Antrean', 'No Visitor', 'Kode Booking', 'Gudang', 'Pengiriman', 'No Polisi', 'Vendor', 'Supir', 'Jam Masuk Slot', 'Status', 'Keterangan Kedatangan', 'Jam Daftar', 'Jam Masuk', 'Mulai Bongkar/Muat', 'Selesai', 'Keluar', 'Antre (mnt)', 'Bongkar (mnt)', 'Di Area (mnt)', 'Masuk Oleh', 'Mulai Oleh', 'Selesai Oleh', 'Keluar Oleh', 'Jadwal Ulang'].map(q).join(';'));
     d.detail.forEach((x) => L.push([x.tanggal, x.kartuLabel, x.visitor, x.noAntrean, x.plant, x.pengiriman, x.noKendaraan, x.vendor, x.namaSupir, fmtSlot(x.jadwal), x.status, x.ket || '',
       x.daftarAt ? new Date(x.daftarAt).toLocaleString('id-ID') : '', fmtTime(x.masukAt), fmtTime(x.prosesAt), fmtTime(x.selesaiAt), fmtTime(x.keluarAt),
-      ...[x.durasiAntre, x.durasiBongkar, x.durasiArea].map((m) => (m == null ? '' : Math.round(m)))].map(q).join(';')));
+      ...[x.durasiAntre, x.durasiBongkar, x.durasiArea].map((m) => (m == null ? '' : Math.round(m))),
+      ...['masuk', 'proses', 'selesai', 'keluar'].map((k) => (x.oleh && x.oleh[k]) || ''), x.jadwalUlang || ''].map(q).join(';')));
     L.push('');
     L.push(['REKAP KETERLAMBATAN'].map(q).join(';'));
     L.push(['Tanggal', 'Kategori', 'Kode Booking', 'No Polisi', 'Vendor', 'Supir', 'Gudang', 'Jadwal Awal', 'Jadwal Akhir', 'Jam Masuk', 'Telat (mnt)', 'Alasan'].map(q).join(';'));
@@ -3340,6 +3366,8 @@ function lateInfo(x, today) {
   return { menit: diff, sisa, batas: batas ? fmtTime(x.batasDatang) : '', telatDaftar };
 }
 const HANGUS_MENIT = 30;
+// Nama akun pendek untuk ditampilkan di bawah jam tahap (security.danru.budi → danru.budi)
+const byName = (u) => String(u || '').replace(/^(security|gdfg|gdrm|gdpm|ppic)\./i, '');
 // Ikon per aksi tombol kartu
 const ACT_ICON = { masuk: 'right', tolak: 'x', proses: 'box', selesai: 'check', keluar: 'logout', keluarPaksa: 'alert' };
 const lateLabel = (l) => {
@@ -3659,8 +3687,9 @@ const ExcelExport = {
     ws.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     const proc = g === 'GDFG' ? 'Muat' : 'Bongkar';
     const head = ['No', 'Tanggal', 'Hari', 'Kartu', 'Visitor', 'Kode Booking', 'No. Polisi', 'Vendor', 'Supir', 'Jam Masuk Slot', 'Status', 'Keterangan Kedatangan',
-      'Jam Daftar', 'Jam Masuk', `Mulai ${proc}`, `Selesai ${proc}`, 'Jam Keluar', 'Antre (mnt)', `${proc} (mnt)`, 'Di Area (mnt)'];
-    ws.columns = [5, 12, 9, 11, 8, 18, 13, 26, 18, 10, 11, 30, 16, 10, 11, 12, 10, 10, 11, 11].map((width) => ({ width }));
+      'Jam Daftar', 'Jam Masuk', `Mulai ${proc}`, `Selesai ${proc}`, 'Jam Keluar', 'Antre (mnt)', `${proc} (mnt)`, 'Di Area (mnt)',
+      'Masuk Oleh', `${proc} Oleh`, 'Selesai Oleh', 'Keluar Oleh', 'Jadwal Ulang'];
+    ws.columns = [5, 12, 9, 11, 8, 18, 13, 26, 18, 10, 11, 30, 16, 10, 11, 12, 10, 10, 11, 11, 16, 16, 16, 16, 11].map((width) => ({ width }));
     ws.mergeCells(1, 1, 1, head.length);
     ws.getCell(1, 1).value = `REKAP ANTREAN ${g} · WEEK ${w.no} (${this.dm(w.dari)} – ${this.dm(w.sampai)})`;
     ws.getCell(1, 1).font = { bold: true, size: 15, color: { argb: XL_COLOR[g] } };
@@ -3692,7 +3721,8 @@ const ExcelExport = {
         this.dataRow(ws, row, [i + 1, this.dmy(x.tanggal), dayName(x.tanggal), x.kartuLabel || '', x.visitor ? String(x.visitor).padStart(2, '0') : '', x.noAntrean, x.noKendaraan, x.vendor, x.namaSupir,
           fmtSlot(x.jadwal), x.status, x.ket || '', x.daftarAt ? new Date(x.daftarAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : '',
           t(x.masukAt), t(x.prosesAt), t(x.selesaiAt), t(x.keluarAt),
-          ...[x.durasiAntre, x.durasiBongkar, x.durasiArea].map((m) => (m == null ? '' : Math.round(m)))]);
+          ...[x.durasiAntre, x.durasiBongkar, x.durasiArea].map((m) => (m == null ? '' : Math.round(m))),
+          ...['masuk', 'proses', 'selesai', 'keluar'].map((k) => (x.oleh && x.oleh[k]) || ''), x.jadwalUlang ? `${x.jadwalUlang}×` : '']);
         if (/Terlambat|Hangus|Tidak datang/.test(x.ket || '')) ws.getCell(row, 12).font = { bold: true, color: { argb: 'FFB91C1C' } };
         row++;
       });
