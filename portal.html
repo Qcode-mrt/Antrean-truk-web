@@ -4558,11 +4558,11 @@ const Monitor = {
     Modal.open('Ubah Kata Sandi', `
       <div class="pw-who">${icon('user')}<div><b>${esc(u.username)}</b><small>${esc(u.role)}${u.role === 'Gudang' ? ` · ${esc(u.plant)}` : ''} · diatur ${esc(fmtAgo(u.pwAt).toLowerCase())}</small></div></div>
       <div class="field"><label class="lbl" for="pwNew">Kata sandi baru</label>
-        <div class="control"><svg class="i"><use href="#i-lock"/></svg><input id="pwNew" type="password" maxlength="64" autocomplete="new-password" placeholder="Minimal 8 karakter">
+        <div class="control"><svg class="i"><use href="#i-lock"/></svg><input id="pwNew" type="password" maxlength="64" autocomplete="new-password" placeholder="Minimal 10 karakter">
           <button type="button" class="pw-toggle" data-pwt="pwNew" aria-label="Tampilkan"><svg class="i"><use href="#i-eye"/></svg></button></div>
         <div class="pw-meter"><i id="pwBar"></i></div><span class="pw-meter-label" id="pwLabel">Belum diisi</span>
         <ul class="pw-rules" id="pwRules">
-          <li data-r="len">Minimal 8 karakter</li><li data-r="up">Ada huruf besar (A–Z)</li>
+          <li data-r="len">Minimal 10 karakter</li><li data-r="up">Ada huruf besar (A–Z)</li>
           <li data-r="low">Ada huruf kecil (a–z)</li><li data-r="num">Ada angka (0–9)</li>
           <li data-r="name">Tidak memuat nama akun</li><li data-r="space">Tanpa spasi</li></ul>
         <button type="button" class="btn btn-ghost btn-xs pw-gen" id="pwGen">${icon('refresh')}Buatkan kata sandi kuat</button></div>
@@ -4578,7 +4578,7 @@ const Monitor = {
       const v = $('#pwNew').value;
       const low = v.toLowerCase();
       const rules = {
-        len: v.length >= 8, up: /[A-Z]/.test(v), low: /[a-z]/.test(v), num: /\d/.test(v),
+        len: v.length >= 10, up: /[A-Z]/.test(v), low: /[a-z]/.test(v), num: /\d/.test(v),
         name: !!v && !parts.some((p) => low.includes(p)), space: !!v && !/\s/.test(v),
       };
       $$('#pwRules li').forEach((li) => li.classList.toggle('ok', rules[li.dataset.r]));
@@ -4653,7 +4653,7 @@ function pwRules(v, username) {
   const low = v.toLowerCase();
   const parts = String(username || '').split(/[._-]/).filter((p) => p.length >= 3);
   return {
-    len: v.length >= 8, up: /[A-Z]/.test(v), low: /[a-z]/.test(v), num: /\d/.test(v),
+    len: v.length >= 10, up: /[A-Z]/.test(v), low: /[a-z]/.test(v), num: /\d/.test(v),
     name: !!v && !parts.some((p) => low.includes(p)), space: !!v && !/\s/.test(v),
   };
 }
@@ -4780,11 +4780,11 @@ Object.assign(Monitor, {
       <div class="au-access" id="auAccess"></div>
       <div class="field"><label class="lbl" for="auPw">Kata sandi BARU untuk user ini</label>
         <small class="au-hint" style="margin:-2px 0 6px">Buat kata sandi baru yang nanti dipakai login oleh user ini — <b>bukan</b> kata sandi admin Anda.</small>
-        <div class="control"><svg class="i"><use href="#i-lock"/></svg><input id="auPw" type="password" maxlength="64" autocomplete="new-password" placeholder="Contoh: Ppic2026 (ada huruf besar, kecil & angka)">
+        <div class="control"><svg class="i"><use href="#i-lock"/></svg><input id="auPw" type="password" maxlength="64" autocomplete="new-password" placeholder="Klik Buatkan kata sandi kuat di bawah">
           <button type="button" class="pw-toggle" id="auToggle" aria-label="Tampilkan"><svg class="i"><use href="#i-eye"/></svg></button></div>
         <div class="pw-meter"><i id="auBar"></i></div><span class="pw-meter-label" id="auLabel">Belum diisi</span>
         <ul class="pw-rules" id="auRules">
-          <li data-r="len">Minimal 8 karakter</li><li data-r="up">Ada huruf besar (A–Z)</li>
+          <li data-r="len">Minimal 10 karakter</li><li data-r="up">Ada huruf besar (A–Z)</li>
           <li data-r="low">Ada huruf kecil (a–z)</li><li data-r="num">Ada angka (0–9)</li>
           <li data-r="name">Tidak memuat nama akun</li><li data-r="space">Tanpa spasi</li></ul>
         <button type="button" class="btn btn-ghost btn-xs pw-gen" id="auGen">${icon('refresh')}Buatkan kata sandi kuat</button></div>
@@ -4858,14 +4858,19 @@ Object.assign(Monitor, {
 });
 
 // Kata sandi acak kuat (crypto) — huruf/angka mudah dibaca + 1 simbol
-function genPassword(len = 12) {
+function genPassword(len = 14) {
   const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!@#$%&*?'];
   const all = sets.slice(0, 3).join('');
   const rnd = (n) => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; };
   const out = sets.map((s) => s[rnd(s.length)]);
   while (out.length < len) out.push(all[rnd(all.length)]);
   for (let i = out.length - 1; i > 0; i--) { const j = rnd(i + 1); [out[i], out[j]] = [out[j], out[i]]; } // acak urutan
-  return out.join('');
+  const pw = out.join('');
+  // Ulangi bila kebetulan memuat pola yang ditolak server (sangat jarang)
+  const low = pw.toLowerCase();
+  const seq = '0123456789 abcdefghijklmnopqrstuvwxyz 9876543210 zyxwvutsrqponmlkjihgfedcba';
+  const bad = /(dsc|1601|admin|danru)/.test(low) || [...Array(Math.max(0, low.length - 3)).keys()].some((i) => seq.includes(low.slice(i, i + 4)));
+  return bad ? genPassword(len) : pw;
 }
 
 
