@@ -596,6 +596,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .kx-grp .gi .i{width:16px;height:16px}
 .kx-grp small{font-weight:600;color:var(--muted);font-size:12px}
 .kx-old{display:inline-block;margin-top:4px;font-size:10.5px;font-weight:800;color:#9a3412;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:1px 6px}
+.lock-box{margin:0 0 14px;padding:12px 14px;border-radius:14px;background:#fef2f2;border:2px solid #fca5a5}
+.lock-box b{color:#991b1b}
+.lock-box .lk{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:8px 0;border-top:1px dashed #fca5a5}
+.lock-box .lk:first-of-type{border-top:0}
+.lock-box small{display:block;color:#7f1d1d;font-size:12px}
 .rj-cats{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
 .rj-cats button{border:2px solid var(--line);background:#fff;border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .rj-cats button.on{background:var(--err);border-color:var(--err);color:#fff}
@@ -1988,10 +1993,11 @@ body:has(#loginView:not([hidden])) .scan-fab,body:has(#hubView:not([hidden])) .s
             <div class="pw-intro">
               <span class="pw-intro-ico"><svg class="i"><use href="#i-key"/></svg></span>
               <div><b>Ubah kata sandi akun petugas</b>
-                <p>Pilih akun lalu tekan <b>Ubah Kata Sandi</b>. Syarat: minimal 8 karakter, ada huruf besar, huruf kecil &amp; angka, dan tidak memuat nama akun.
+                <p>Pilih akun lalu tekan <b>Ubah Kata Sandi</b>. Syarat: minimal 10 karakter, ada huruf besar, huruf kecil &amp; angka, tidak memuat nama akun atau kata mudah ditebak. Pakai tombol <b>Buatkan kata sandi kuat</b>.
                   Setelah diganti, petugas yang sedang login otomatis keluar.</p></div>
               <button type="button" class="btn btn-primary" id="admAddUser"><svg class="i"><use href="#i-plus"/></svg>Tambah User</button>
             </div>
+            <div id="admLocks"></div>
             <div class="pw-grid" id="admPwCards"></div>
             <div class="panel">
               <div class="panel-head"><svg class="i"><use href="#i-user"/></svg><span>Semua Akun</span><span class="ph-right">Aktifkan / nonaktifkan &amp; buka kunci login</span></div>
@@ -4303,6 +4309,10 @@ const Monitor = {
     $('#admUsers').addEventListener('click', onUserAct);
     $('#admUserCards').addEventListener('click', onUserAct);
     $('#admPwCards').addEventListener('click', onUserAct);
+    $('#admLocks').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-unlockname]');
+      if (b) this.unlock({ username: b.dataset.unlockname }, b);
+    });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#adminView').hidden) this.load(); });
   },
 
@@ -4380,6 +4390,7 @@ const Monitor = {
     this.renderCap();
     this.renderSec();
     this.renderUsers();
+    this.renderLocks();
     this.renderLogs();
   },
 
@@ -4481,6 +4492,14 @@ const Monitor = {
       ${u.locked ? `<button type="button" class="btn btn-outline btn-xs" data-uact="unlock" data-user="${esc(u.username)}"><span class="spinner dark"></span>${icon('lock')}Buka Kunci</button>` : ''}
       ${u.self ? '' : `<button type="button" class="btn btn-outline btn-xs" data-uact="active" data-user="${esc(u.username)}"><span class="spinner dark"></span>${u.active ? 'Nonaktifkan' : 'Aktifkan'}</button>`}`;
   },
+  // Username yang sedang terkunci (5x salah password), termasuk username salah ketik
+  renderLocks() {
+    const list = this.data.locks || [];
+    $('#admLocks').innerHTML = list.length ? `<div class="lock-box"><b>${icon('lock')} Login terkunci sekarang (${list.length})</b>
+      ${list.map((l) => `<div class="lk"><div><b>${esc(l.username)}</b><small>${l.exists ? 'Salah password 5x · terbuka otomatis 10 menit' : 'Username ini TIDAK ADA — kemungkinan salah ketik (mis. lupa ".admin")'}</small></div>
+        <button type="button" class="btn btn-outline btn-xs" data-unlockname="${esc(l.username)}"><span class="spinner dark"></span>${icon('lock')}Buka Kunci</button></div>`).join('')}</div>` : '';
+  },
+
   renderUsers() {
     const order = { Admin: 0, Security: 1, PPIC: 2, Gudang: 3 };
     const rank = (r) => (r in order ? order[r] : 9);
